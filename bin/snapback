@@ -20,6 +20,9 @@ my $SNAPSHOT   = "$BACKUP_DIR/SNAPSHOT-$DATE";
 my $NOTIFY     = "/home/pjf/bin/notify";
 my $WAIT_TIME  = 60;    # In seconds
 
+# udev doesn't give us much in the way of paths. Let's fix that.
+$ENV{PATH} = "$ENV{PATH}:/bin:/usr/bin";
+
 # Immediately become a daemon so udev doesn't get grumpy with us
 
 Proc::Daemon::Init();
