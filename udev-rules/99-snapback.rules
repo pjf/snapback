@@ -1,4 +1,4 @@
 # This file goes in your /etc/udev/rules.d/ directory
 
 SUBSYSTEM=="block", ENV{ID_FS_LABEL}=="qapla-backup", ACTION=="add", \
-    RUN+="/bin/sh -c /bin/echo /usr/local/bin/snapback | /usr/bin/at now"
+    RUN+="/usr/local/bin/snapback"
