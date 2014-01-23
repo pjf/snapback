@@ -1,0 +1,30 @@
+#!/usr/bin/perl -w
+use 5.010;
+use strict;
+use warnings;
+use autodie;
+use WebService::Pushover;
+
+# Simple pushover notify script
+# Paul '@pjf' Fenwick, Jan 2014
+
+my $priority = 0;
+
+# If we see what looks like a priority, use it.
+
+if ( ($ARGV[0] || "") =~ /^[+-]?\d$/) {
+    $priority = shift;
+}
+
+@ARGV or die "Usage: $0 [priority] message";
+
+my $push = WebService::Pushover->new;
+
+$push->message(
+    token => 'YOUR-API-TOKEN',
+    user  => 'YOUR-USER-TOKEN',
+    message => "@ARGV",
+    priority => $priority,
+);
+
+exit 0;

@@ -1,0 +1,97 @@
+#!/usr/bin/perl -w
+use 5.010;
+use strict;
+use warnings;
+use local::lib '/home/pjf/perl5';
+use autodie qw(:all);
+use POSIX qw(strftime);
+use Fcntl qw(:flock);
+use Try::Tiny;
+
+# Snapback automatic backup script
+# Paul '@pjf' Fenwick, Jan 2014
+
+use constant DEBUG => 0;
+
+my $BACKUP_DIR = "/mnt/qapla-backup";
+my $DATE       = strftime("%Y-%m-%d",gmtime);
+my $SNAPSHOT   = "$BACKUP_DIR/SNAPSHOT-$DATE";
+my $NOTIFY     = "/home/pjf/bin/notify";
+my $WAIT_TIME  = 60;    # In seconds
+
+try {
+    # Don't run twice! That would be bad.
+
+    flock(DATA, LOCK_EX | LOCK_NB)
+        or die "Backup already running - exiting\n";
+
+    # Okay, now try our backup. :)
+    make_backup();
+}
+catch {
+    notify(1, "Backup failed! $_");
+    exit 1;
+};
+
+exit 0;
+
+sub make_backup {
+
+    # Make sure our directory is mounted. Note we're
+    # using autodie's magic system here which returns
+    # the cmd's exit status.
+
+    my $needs_mounting = system( [-1], "mountpoint -q $BACKUP_DIR");
+
+    if ($needs_mounting) {
+        notify(-1, "Mounting $BACKUP_DIR");
+        system("mount $BACKUP_DIR");
+    }
+
+    if (-e $SNAPSHOT) {
+
+        # We already have a backup today. Presume they're adding
+        # the drive for some other purpose.
+
+        notify("Backup already taken today, skipping.");
+        exit 0;
+    }
+
+    # Take our backup... We sleep first, to give our user some
+    # time to kill the process if they want.
+
+    notify("Starting backup in $WAIT_TIME seconds");
+
+    sleep($WAIT_TIME);
+
+    notify("Backup starting...");
+    system("ionice -c3 nice rsync -HAaxX --delete / $BACKUP_DIR");
+
+    # Snapshot...
+    notify(-1, "Snapshotting backup with date: $DATE (UTC)");
+    system("btrfs subvolume snapshot -r $BACKUP_DIR $SNAPSHOT");
+
+    if ($needs_mounting) {
+
+        # If we needed to mount, we should unmount at the end.
+        notify(-1,"Unmounting drive");
+        system("umount $BACKUP_DIR");
+    }
+
+    # Done!
+    notify("Backup complete");
+}
+
+sub notify {
+    # However you want to get notified goes here. You could use
+    # 'say', but I have a script that sends messages to my pebble
+    # watch.
+
+    say "@_" if DEBUG;
+
+    system($NOTIFY, @_);
+}
+
+__DATA__
+
+This magic line is needed for locking magic.
