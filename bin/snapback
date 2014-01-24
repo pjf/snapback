@@ -8,6 +8,7 @@ use POSIX qw(strftime);
 use Fcntl qw(:flock);
 use Try::Tiny;
 use Proc::Daemon;
+use Getopt::Std;
 
 # Snapback automatic backup script
 # Paul '@pjf' Fenwick, Jan 2014
@@ -27,9 +28,21 @@ my $LOGFILE    = "/root/rsync.log";
 # udev doesn't give us much in the way of paths. Let's fix that.
 $ENV{PATH} = "$ENV{PATH}:/bin:/usr/bin:/sbin:/usr/sbin";
 
-# Immediately become a daemon so udev doesn't get grumpy with us
+my %opts = (
+    t => 0,         # Remain attached to terminal, disables wait
+    s => '',        # Snapshot name
+);
 
-Proc::Daemon::Init();
+getopts('ts:', \%opts);
+
+if (not $opts{t}) {
+    # Immediately become a daemon so udev doesn't get grumpy with us
+    Proc::Daemon::Init();
+}
+
+if ($opts{s}) {
+    $SNAPSHOT = "$BACKUP_DIR/SNAPSHOT-$opts{s}";
+}
 
 try {
     # Don't run twice! That would be bad.
@@ -69,12 +82,14 @@ sub make_backup {
         exit 0;
     }
 
-    # Take our backup... We sleep first, to give our user some
-    # time to kill the process if they want.
+    if (not $opts{t}) {
+        # Take our backup... We sleep first, to give our user some
+        # time to kill the process if they want.
 
-    notify("Starting backup in $WAIT_TIME seconds");
+        notify("Starting backup in $WAIT_TIME seconds");
 
-    sleep($WAIT_TIME);
+        sleep($WAIT_TIME);
+    }
 
     notify("Backup starting...");
     system("ionice -c3 nice rsync -HAaxX --delete --filter 'P SNAPSHOT-*' / $BACKUP_DIR > $LOGFILE 2>&1");
@@ -99,7 +114,7 @@ sub notify {
     # 'say', but I have a script that sends messages to my pebble
     # watch.
 
-    say "@_" if DEBUG;
+    say "@_" if $opts{t};
 
     system($NOTIFY, @_);
 }
