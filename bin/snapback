@@ -20,6 +20,10 @@ my $SNAPSHOT   = "$BACKUP_DIR/SNAPSHOT-$DATE";
 my $NOTIFY     = "/home/pjf/bin/notify";
 my $WAIT_TIME  = 60;    # In seconds
 
+# We don't put this in /tmp because then someone could
+# symlink it elsewhere.
+my $LOGFILE    = "/root/rsync.log";
+
 # udev doesn't give us much in the way of paths. Let's fix that.
 $ENV{PATH} = "$ENV{PATH}:/bin:/usr/bin:/sbin:/usr/sbin";
 
@@ -73,7 +77,7 @@ sub make_backup {
     sleep($WAIT_TIME);
 
     notify("Backup starting...");
-    system("ionice -c3 nice rsync -HAaxX --delete / $BACKUP_DIR");
+    system("ionice -c3 nice rsync -HAaxX --delete --filter 'P SNAPSHOT-*' / $BACKUP_DIR > $LOGFILE 2>&1");
 
     # Snapshot...
     notify(-1, "Snapshotting backup with date: $DATE (UTC)");
