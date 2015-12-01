@@ -20,6 +20,7 @@ my $DATE       = strftime("%Y-%m-%d",gmtime);
 my $SNAPSHOT   = "$BACKUP_DIR/SNAPSHOT-$DATE";
 my $NOTIFY     = "/home/pjf/bin/notify";
 my $WAIT_TIME  = 60;    # In seconds
+my @FILESYSTEMS = qw(/ /home);
 
 # We don't put this in /tmp because then someone could
 # symlink it elsewhere.
@@ -92,7 +93,7 @@ sub make_backup {
     }
 
     notify("Backup starting...");
-    system("ionice -c3 nice rsync -HAaxX --delete --filter 'P SNAPSHOT-*' / $BACKUP_DIR > $LOGFILE 2>&1");
+    system("ionice -c3 nice rsync -HAaxX --delete --exclude=/etc/snapback-ignore --filter 'P SNAPSHOT-*' @FILESYSTEMS $BACKUP_DIR > $LOGFILE 2>&1");
 
     # Snapshot...
     notify(-1, "Snapshotting backup with date: $DATE (UTC)");
