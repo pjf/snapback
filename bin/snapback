@@ -9,18 +9,23 @@ use Fcntl qw(:flock);
 use Try::Tiny;
 use Proc::Daemon;
 use Getopt::Std;
+use Sys::Hostname qw(hostname);
 
 # Snapback automatic backup script
 # Paul '@pjf' Fenwick, Jan 2014
 
 use constant DEBUG => 0;
 
-my $BACKUP_DIR = "/mnt/qapla-backup";
-my $DATE       = strftime("%Y-%m-%d",gmtime);
-my $SNAPSHOT   = "$BACKUP_DIR/SNAPSHOT-$DATE";
-my $NOTIFY     = "/home/pjf/bin/notify";
-my $WAIT_TIME  = 60;    # In seconds
-my @FILESYSTEMS = qw(/ /home);
+my $MOUNT_DIR    = "/mnt/qapla-backup";
+my $DATE         = strftime("%Y-%m-%d",gmtime);
+my $HOST         = hostname();
+my $BACKUP_DIR   = "$MOUNT_DIR/$HOST";
+my $SNAPSHOT_DIR = "$MOUNT_DIR/snapshots";
+my $SNAPSHOT     = "$SNAPSHOT_DIR/SNAPSHOT-$HOST-$DATE";
+my $NOTIFY       = "/home/pjf/bin/notify";
+my $WAIT_TIME    = 60;    # In seconds
+my @FILESYSTEMS  = qw(/ /home);
+my @RSYNC_OPTS   = qw(-HAaxX --delete --exclude=/etc/snapback-ignore);
 
 # We don't put this in /tmp because then someone could
 # symlink it elsewhere.
@@ -32,9 +37,16 @@ $ENV{PATH} = "$ENV{PATH}:/bin:/usr/bin:/sbin:/usr/sbin";
 my %opts = (
     t => 0,         # Remain attached to terminal, disables wait
     s => '',        # Snapshot name
+    v => 0,         # Verbose mode. Implies -t.
 );
 
-getopts('ts:', \%opts);
+getopts('vts:', \%opts);
+
+# Verbose mode requires a terminal.
+if ($opts{v}) {
+    $opts{t} = 1;
+    push @RSYNC_OPTS, '-v';
+}
 
 if (not $opts{t}) {
     # Immediately become a daemon so udev doesn't get grumpy with us
@@ -42,7 +54,7 @@ if (not $opts{t}) {
 }
 
 if ($opts{s}) {
-    $SNAPSHOT = "$BACKUP_DIR/SNAPSHOT-$opts{s}";
+    $SNAPSHOT = "$SNAPSHOT_DIR/SNAPSHOT-$HOST-$opts{s}";
 }
 
 try {
@@ -67,11 +79,11 @@ sub make_backup {
     # using autodie's magic system here which returns
     # the cmd's exit status.
 
-    my $needs_mounting = system( [-1], "mountpoint -q $BACKUP_DIR");
+    my $needs_mounting = system( [-1], "mountpoint -q $MOUNT_DIR");
 
     if ($needs_mounting) {
-        notify(-1, "Mounting $BACKUP_DIR");
-        system("mount $BACKUP_DIR");
+        notify(-1, "Mounting $MOUNT_DIR");
+        system("mount $MOUNT_DIR");
     }
 
     if (-e $SNAPSHOT) {
@@ -93,7 +105,7 @@ sub make_backup {
     }
 
     notify("Backup starting...");
-    system("ionice -c3 nice rsync -HAaxX --delete --exclude=/etc/snapback-ignore --filter 'P SNAPSHOT-*' @FILESYSTEMS $BACKUP_DIR > $LOGFILE 2>&1");
+    system("ionice -c3 nice rsync @RSYNC_OPTS @FILESYSTEMS $BACKUP_DIR > $LOGFILE 2>&1");
 
     # Snapshot...
     notify(-1, "Snapshotting backup with date: $DATE (UTC)");
@@ -103,7 +115,7 @@ sub make_backup {
 
         # If we needed to mount, we should unmount at the end.
         notify(-1,"Unmounting drive");
-        system("umount $BACKUP_DIR");
+        system("umount $MOUNT_DIR");
     }
 
     # Done!
@@ -115,9 +127,14 @@ sub notify {
     # 'say', but I have a script that sends messages to my pebble
     # watch.
 
-    say "@_" if $opts{t};
-
-    system($NOTIFY, @_);
+    # If running with -t, write to the terminal
+    if ($opts{t}) {
+        say "@_";
+    }
+    else {
+        # Otherwise, send it to my watch. :)
+        system($NOTIFY, @_);
+    }
 }
 
 __DATA__
