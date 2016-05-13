@@ -105,7 +105,9 @@ sub make_backup {
     }
 
     notify("Backup starting...");
-    system("ionice -c3 nice rsync @RSYNC_OPTS @FILESYSTEMS $BACKUP_DIR > $LOGFILE 2>&1");
+
+    # Exit 24 is files going missing, which is totally fine and expected on a live system.
+    system([0,24], "ionice -c3 nice rsync @RSYNC_OPTS @FILESYSTEMS $BACKUP_DIR > $LOGFILE 2>&1");
 
     # Snapshot...
     notify(-1, "Snapshotting backup with date: $DATE (UTC)");
